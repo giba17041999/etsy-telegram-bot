@@ -19,7 +19,6 @@ def check_orders():
 
     mail = imaplib.IMAP4_SSL("imap.gmail.com")
     mail.login(EMAIL, PASSWORD)
-
     mail.select("inbox")
 
     status, messages = mail.search(None, '(UNSEEN FROM "etsy.com")')
@@ -32,9 +31,14 @@ def check_orders():
         raw_email = msg_data[0][1]
         msg = email.message_from_bytes(raw_email)
 
-        subject = msg["subject"]
+        subject = msg.get("subject")
 
-        send_telegram(f"New Etsy Order:\n{subject}")
+        if subject is None:
+            subject = "New Etsy Order"
+
+        subject = subject.replace("\n", " ").replace("\r", " ")
+
+        send_telegram(f"🛒 New Etsy Order\n\n{subject}")
 
 while True:
     try:
