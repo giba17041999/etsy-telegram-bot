@@ -1,49 +1,79 @@
 import imaplib
 import email
-import os
-import time
 import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 EMAIL = os.getenv("haanhtuanetsy@gmail.com")
 PASSWORD = os.getenv("lgjuymixrdsvkmvp")
+
 BOT_TOKEN = os.getenv("8687189308:AAG0IKJPF84WnsXB6DxGKvcltu81222njzY")
 CHAT_ID = os.getenv("7242802148")
 
-def send_telegram(msg):
+
+def send_to_telegram(message):
+
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": msg}
+
+    data = {
+        "chat_id": CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+
     requests.post(url, data=data)
 
-def check_orders():
-    print("Checking Etsy orders...")
+
+def check_email():
 
     mail = imaplib.IMAP4_SSL("imap.gmail.com")
     mail.login(EMAIL, PASSWORD)
+
     mail.select("inbox")
 
-    status, messages = mail.search(None, '(UNSEEN FROM "etsy.com")')
+    status, messages = mail.search(None, 'UNSEEN')
 
-    if status != "OK":
-        return
+    email_ids = messages[0].split()
 
-    for num in messages[0].split():
-        status, msg_data = mail.fetch(num, "(RFC822)")
-        raw_email = msg_data[0][1]
-        msg = email.message_from_bytes(raw_email)
+    for e_id in email_ids:
 
-        subject = msg.get("subject")
+        status, msg_data = mail.fetch(e_id, "(RFC822)")
 
-        if subject is None:
-            subject = "New Etsy Order"
+        for response_part in msg_data:
 
-        subject = subject.replace("\n", " ").replace("\r", " ")
+            if isinstance(response_part, tuple):
 
-        send_telegram(f"🛒 New Etsy Order\n\n{subject}")
+                msg = email.message_from_bytes(response_part[1])
 
-while True:
-    try:
-        check_orders()
-    except Exception as e:
-        print("Error:", e)
+                subject = msg["subject"]
+                sender = msg["from"]
 
-    time.sleep(60)
+                body = ""
+
+                if msg.is_multipart():
+                    for part in msg.walk():
+                        if part.get_content_type() == "text/plain":
+                            body = part.get_payload(decode=True).decode()
+
+                else:
+                    body = msg.get_payload(decode=True).decode()
+
+                message = f"""
+📦 NEW ORDER EMAIL
+
+From: {sender}
+
+Subject: {subject}
+
+Details:
+{body[:800]}
+"""
+
+                send_to_telegram(message)
+
+
+if __name__ == "__main__":
+
+    check_email()
