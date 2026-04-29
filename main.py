@@ -6,61 +6,81 @@ import requests
 from bs4 import BeautifulSoup
 
 EMAIL = os.environ.get("haanhtuanetsy@gmail.com")
-PASSWORD = os.environ.get("slzzfsvttjqpjykt")
+PASSWORD = os.environ.get("vsakjtetibpbjymn")
 BOT_TOKEN = os.environ.get("8687189308:AAG0IKJPF84WnsXB6DxGKvcltu81222njzY")
 CHAT_ID = os.environ.get("7242802148")
 
 
 def send_message(text):
+
+    if not BOT_TOKEN or not CHAT_ID:
+        print("Telegram variables missing")
+        return
+
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
-    requests.post(
-        url,
-        data={
-            "chat_id": CHAT_ID,
-            "text": text,
-            "parse_mode": "HTML"
-        }
-    )
+    try:
+        requests.post(
+            url,
+            data={
+                "chat_id": CHAT_ID,
+                "text": text,
+                "parse_mode": "HTML"
+            },
+            timeout=10
+        )
+    except Exception as e:
+        print("Send message error:", e)
 
 
 def send_photo(photo, caption):
+
+    if not BOT_TOKEN or not CHAT_ID:
+        return
+
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
 
-    requests.post(
-        url,
-        data={
-            "chat_id": CHAT_ID,
-            "photo": photo,
-            "caption": caption,
-            "parse_mode": "HTML"
-        }
-    )
+    try:
+        requests.post(
+            url,
+            data={
+                "chat_id": CHAT_ID,
+                "photo": photo,
+                "caption": caption,
+                "parse_mode": "HTML"
+            },
+            timeout=10
+        )
+    except Exception as e:
+        print("Send photo error:", e)
 
 
 def get_html(msg):
 
-    if msg.is_multipart():
+    try:
 
-        for part in msg.walk():
+        if msg.is_multipart():
 
-            if part.get_content_type() == "text/html":
+            for part in msg.walk():
 
-                html = part.get_payload(decode=True)
+                if part.get_content_type() == "text/html":
+
+                    html = part.get_payload(decode=True)
+
+                    if html:
+                        return html.decode(errors="ignore")
+
+        else:
+
+            if msg.get_content_type() == "text/html":
+
+                html = msg.get_payload(decode=True)
 
                 if html:
-
                     return html.decode(errors="ignore")
 
-    else:
-
-        if msg.get_content_type() == "text/html":
-
-            html = msg.get_payload(decode=True)
-
-            if html:
-
-                return html.decode(errors="ignore")
+    except Exception as e:
+        print("HTML parse error:", e)
 
     return ""
 
@@ -79,8 +99,9 @@ def parse_email(html):
     shipping = "Unknown"
     image = None
 
-    # product title
+    # find product
     try:
+
         for tag in soup.find_all(["h1", "h2", "h3"]):
 
             t = tag.get_text().strip()
@@ -89,39 +110,47 @@ def parse_email(html):
 
                 product = t
                 break
+
     except:
         pass
 
-    # total price
+    # find price
     try:
+
         for l in lines:
 
             if "$" in l and "." in l:
 
                 total = l
                 break
+
     except:
         pass
 
-    # personalization
+    # find personalization
     try:
+
         for l in lines:
 
             if "personalization" in l.lower():
 
                 personalization = l
                 break
+
     except:
         pass
 
-    # shipping address
+    # find shipping address
     try:
+
         start = False
         addr = []
 
         for l in lines:
 
-            if "ship to" in l.lower() or "shipping address" in l.lower():
+            low = l.lower()
+
+            if "ship to" in low or "shipping address" in low:
 
                 start = True
                 continue
@@ -131,26 +160,29 @@ def parse_email(html):
                 addr.append(l)
 
                 if len(addr) >= 5:
-
                     break
 
         if addr:
-
             shipping = "\n".join(addr)
 
     except:
         pass
 
-    # product image
+    # find product image
     try:
+
         for img in soup.find_all("img"):
 
             src = img.get("src")
 
-            if src and "etsyimg.com" in src:
+            if not src:
+                continue
+
+            if "etsyimg.com" in src:
 
                 image = src
                 break
+
     except:
         pass
 
@@ -159,33 +191,39 @@ def parse_email(html):
 
 def check_orders():
 
-    mail = imaplib.IMAP4_SSL("imap.gmail.com")
+    if not EMAIL or not PASSWORD:
 
-    mail.login(EMAIL, PASSWORD)
+        print("Email login missing")
+        return
 
-    mail.select("inbox")
+    try:
 
-    status, data = mail.search(None, '(UNSEEN SUBJECT "You made a sale")')
+        mail = imaplib.IMAP4_SSL("imap.gmail.com")
 
-    ids = data[0].split()
+        mail.login(EMAIL, PASSWORD)
 
-    for num in ids:
+        mail.select("inbox")
 
-        status, msg_data = mail.fetch(num, "(RFC822)")
+        status, data = mail.search(None, '(UNSEEN SUBJECT "You made a sale")')
 
-        raw_email = msg_data[0][1]
+        ids = data[0].split()
 
-        msg = email.message_from_bytes(raw_email)
+        for num in ids:
 
-        html = get_html(msg)
+            status, msg_data = mail.fetch(num, "(RFC822)")
 
-        if not html:
+            raw_email = msg_data[0][1]
 
-            continue
+            msg = email.message_from_bytes(raw_email)
 
-        product, total, personalization, shipping, image = parse_email(html)
+            html = get_html(msg)
 
-        caption = f"""
+            if not html:
+                continue
+
+            product, total, personalization, shipping, image = parse_email(html)
+
+            caption = f"""
 🛒 <b>NEW ETSY ORDER</b>
 
 📦 Product:
@@ -201,8 +239,6 @@ def check_orders():
 {shipping}
 """
 
-        try:
-
             if image:
 
                 send_photo(image, caption)
@@ -211,11 +247,11 @@ def check_orders():
 
                 send_message(caption)
 
-        except Exception as e:
+        mail.logout()
 
-            print("Send error:", e)
+    except Exception as e:
 
-    mail.logout()
+        print("Check order error:", e)
 
 
 while True:
@@ -228,6 +264,6 @@ while True:
 
     except Exception as e:
 
-        print("Error:", e)
+        print("Loop error:", e)
 
     time.sleep(60)
