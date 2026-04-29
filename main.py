@@ -12,7 +12,6 @@ CHAT_ID = os.environ.get("7242802148")
 
 
 def send_message(text):
-
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
     requests.post(
@@ -26,7 +25,6 @@ def send_message(text):
 
 
 def send_photo(photo, caption):
-
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
 
     requests.post(
@@ -41,8 +39,6 @@ def send_photo(photo, caption):
 
 
 def get_html(msg):
-
-    html = None
 
     if msg.is_multipart():
 
@@ -69,60 +65,57 @@ def get_html(msg):
     return ""
 
 
-def find_product(soup):
+def parse_email(html):
 
+    soup = BeautifulSoup(html, "html.parser")
+
+    text = soup.get_text("\n")
+
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+
+    product = "Unknown"
+    total = "Unknown"
+    personalization = "None"
+    shipping = "Unknown"
+    image = None
+
+    # product title
     try:
-
         for tag in soup.find_all(["h1", "h2", "h3"]):
 
-            text = tag.get_text()
+            t = tag.get_text().strip()
 
-            if text and len(text) > 6 and "etsy" not in text.lower():
+            if len(t) > 5 and "etsy" not in t.lower():
 
-                return text.strip()
-
+                product = t
+                break
     except:
         pass
 
-    return "Unknown product"
-
-
-def find_total(lines):
-
+    # total price
     try:
-
         for l in lines:
 
-            if "$" in l and "." in l and len(l) < 20:
+            if "$" in l and "." in l:
 
-                return l.strip()
-
+                total = l
+                break
     except:
         pass
 
-    return "Unknown"
-
-
-def find_personalization(lines):
-
+    # personalization
     try:
-
         for l in lines:
 
             if "personalization" in l.lower():
 
-                return l
-
+                personalization = l
+                break
     except:
         pass
 
-    return "None"
-
-
-def find_shipping(lines):
-
+    # shipping address
     try:
-
         start = False
         addr = []
 
@@ -135,62 +128,31 @@ def find_shipping(lines):
 
             if start:
 
-                if len(addr) < 6:
+                addr.append(l)
 
-                    addr.append(l)
-
-                else:
+                if len(addr) >= 5:
 
                     break
 
         if addr:
 
-            return "\n".join(addr)
+            shipping = "\n".join(addr)
 
     except:
         pass
 
-    return "Unknown"
-
-
-def find_image(soup):
-
+    # product image
     try:
-
         for img in soup.find_all("img"):
 
             src = img.get("src")
 
-            if not src:
-                continue
+            if src and "etsyimg.com" in src:
 
-            if "etsyimg.com" in src:
-
-                return src
-
+                image = src
+                break
     except:
         pass
-
-    return None
-
-
-def parse_email(html):
-
-    soup = BeautifulSoup(html, "html.parser")
-
-    text = soup.get_text("\n")
-
-    lines = [l.strip() for l in text.split("\n") if l.strip()]
-
-    product = find_product(soup)
-
-    total = find_total(lines)
-
-    personalization = find_personalization(lines)
-
-    shipping = find_shipping(lines)
-
-    image = find_image(soup)
 
     return product, total, personalization, shipping, image
 
@@ -203,7 +165,7 @@ def check_orders():
 
     mail.select("inbox")
 
-    status, data = mail.search(None, '(UNSEEN FROM "etsy")')
+    status, data = mail.search(None, '(UNSEEN SUBJECT "You made a sale")')
 
     ids = data[0].split()
 
