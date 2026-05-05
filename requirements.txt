@@ -1,4 +1,3 @@
-imapclient
-pyzmail36
+imap-tools
+playwright
 requests
-python-dotenv
